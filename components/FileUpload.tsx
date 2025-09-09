@@ -1,159 +1,127 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 
 export interface FileData {
-  file: File
-  id: number
-  progress: number
-  preview?: string
+  id: string;
+  file: File;
+  progress: number;
+  preview?: string;
 }
 
 interface FileUploadProps {
-  files: FileData[]
-  onFilesChange: (files: FileData[]) => void
-  onError: (message: string) => void
+  // zgodne z useState<FileData[]>
+  onFilesChange: React.Dispatch<React.SetStateAction<FileData[]>>;
 }
 
-export default function FileUpload({ files, onFilesChange, onError }: FileUploadProps) {
+export default function FileUpload({ onFilesChange }: FileUploadProps) {
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const intervalsRef = useRef<Record<number, NodeJS.Timeout>>({})
-  
+  const intervalsRef = useRef<NodeJS.Timeout[]>([])
+
   useEffect(() => {
+    const localIntervals = intervalsRef.current
     return () => {
-      Object.values(intervalsRef.current).forEach(clearInterval)
+      localIntervals.forEach((interval) => clearInterval(interval))
     }
   }, [])
-  
-  const handleFileSelect = async (selectedFiles: FileList) => {
-    if (files.length >= 10) {
-      onError('Maksymalnie 10 plików')
-      return
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    processFiles(files)
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files)
+      processFiles(files)
     }
-    
-    const newFiles: FileData[] = []
-    
-    for (let i = 0; i < selectedFiles.length && files.length + newFiles.length < 10; i++) {
-      const file = selectedFiles[i]
-      
-      if (file.size > 10 * 1024 * 1024) {
-        onError(`Plik "${file.name}" jest za duży (max 10MB)`)
-        continue
-      }
-      
-      const fileData: FileData = {
-        file,
-        id: Date.now() + i,
-        progress: 0
-      }
-      
-      if (file.type.startsWith('image/')) {
-        const preview = URL.createObjectURL(file)
-        fileData.preview = preview
-      }
-      
-      newFiles.push(fileData)
-    }
-    
-    const updatedFiles = [...files, ...newFiles]
-    onFilesChange(updatedFiles)
-    
-    newFiles.forEach(fileData => {
+  }
+
+  const processFiles = (files: File[]) => {
+    const newFiles: FileData[] = files.map((file) => ({
+      id: Math.random().toString(36).slice(2, 11),
+      file,
+      progress: 0,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+    }))
+
+    // dodajemy do istniejącej listy (bez utraty poprzednich)
+    onFilesChange((prev: FileData[]) => [...prev, ...newFiles])
+
+    newFiles.forEach((fileData) => {
       const interval = setInterval(() => {
-        onFilesChange(prevFiles =>
-          prevFiles.map(f => {
+        onFilesChange((prevFiles: FileData[]) =>
+          prevFiles.map((f) => {
             if (f.id === fileData.id) {
               const newProgress = Math.min(f.progress + Math.random() * 30, 100)
               if (newProgress >= 100) {
-                clearInterval(intervalsRef.current[fileData.id])
-                delete intervalsRef.current[fileData.id]
+                clearInterval(interval)
+                const idx = intervalsRef.current.indexOf(interval)
+                if (idx > -1) intervalsRef.current.splice(idx, 1)
               }
               return { ...f, progress: newProgress }
             }
             return f
           })
         )
-      }, 300)
-      
-      intervalsRef.current[fileData.id] = interval
+      }, 500)
+      intervalsRef.current.push(interval)
     })
   }
-  
-  const removeFile = (fileId: number) => {
-    if (intervalsRef.current[fileId]) {
-      clearInterval(intervalsRef.current[fileId])
-      delete intervalsRef.current[fileId]
-    }
-    
-    const fileToRemove = files.find(f => f.id === fileId)
-    if (fileToRemove?.preview) {
-      URL.revokeObjectURL(fileToRemove.preview)
-    }
-    
-    onFilesChange(files.filter(f => f.id !== fileId))
+
+  const removeFile = (id: string) => {
+    onFilesChange((prevFiles: FileData[]) => prevFiles.filter((f) => f.id !== id))
   }
-  
+
   return (
-    <div>
-      <div
-        className="border-2 border-dashed border-gray-300 rounded-2xl bg-white p-6 text-center cursor-pointer hover:border-orange-400 hover:shadow-lg transition-all duration-200"
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault()
-          if (e.dataTransfer.files.length > 0) {
-            handleFileSelect(e.dataTransfer.files)
-          }
-        }}
-      >
-        <div className="text-2xl text-orange-400 mb-2">📁</div>
-        <div className="text-sm text-gray-600">Kliknij lub przeciągnij pliki</div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,.pdf,.doc,.docx"
-          onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
-          className="hidden"
-        />
-      </div>
-      
-      {files.length > 0 && (
-        <div className="mt-4 space-y-3">
-          {files.map(file => (
-            <div key={file.id} className="flex gap-4 items-center">
-              <div className="w-16 h-16 border border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden">
-                {file.preview ? (
-                  <img src={file.preview} alt={file.file.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-gray-500">📄</span>
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="h-1 bg-orange-100 rounded-full overflow-hidden mb-2">
-                  <div
-                    className="h-full bg-orange-400 transition-all duration-300"
-                    style={{ width: `${file.progress}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <div className="flex gap-3 text-sm">
-                    <span className="text-gray-900">{file.file.name}</span>
-                    <span className="text-gray-500">{(file.file.size / 1024).toFixed(1)} KB</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeFile(file.id)}
-                    className="text-red-500 border border-red-500 px-2 py-1 rounded text-xs hover:bg-red-50"
-                  >
-                    Usuń
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <div
+      className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        isDragging ? 'border-orange-500 bg-orange-50' : 'border-gray-300 hover:border-gray-400'
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+        accept="image/*,.pdf,.doc,.docx"
+      />
+
+      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+      </svg>
+
+      <p className="mt-2 text-sm text-gray-600">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="font-medium text-orange-500 hover:text-orange-600"
+        >
+          Kliknij aby wybrać pliki
+        </button>{' '}
+        lub przeciągnij i upuść
+      </p>
+      <p className="text-xs text-gray-500 mt-1">PNG, JPG, PDF, DOC do 10MB</p>
+
+      {/* Przykładowy przycisk usuwania (ukryty w UI – zostawiamy handler) */}
+      <button type="button" onClick={() => {}} className="hidden" aria-hidden />
     </div>
   )
 }
