@@ -1,0 +1,1126 @@
+=== app/_components/TileGrid.tsx ===
+import Image from "next/image";
+
+type Tile = { src: string; alt: string; ratio?: string };
+
+const tiles: Tile[] = [
+  { src: "/images/home-extension-day.webp", alt: "Home Extension Premium", ratio: "16/9" },
+  { src: "/images/ogrod-klasyczny-day.webp", alt: "Ogród zimowy klasyczny", ratio: "4/3" },
+  { src: "/images/ogrod-sezonowy-day.webp", alt: "Ogród zimowy sezonowy", ratio: "4/3" },
+  { src: "/images/pergola-bioclimatic-day.webp", alt: "Pergola bioclimatic", ratio: "1/1" },
+  { src: "/images/help-me.webp", alt: "Pomóż mi wybrać", ratio: "3/2" }
+];
+
+export default function TileGrid() {
+  return (
+    <section className="mt-12">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-6 sm:grid-cols-2 lg:grid-cols-4">
+        {tiles.map((t, i) => (
+          <article key={i} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-lg transition-shadow">
+            <div className="relative w-full" style={{ aspectRatio: t.ratio || "4/3" }}>
+              <Image 
+                src={t.src} 
+                alt={t.alt} 
+                fill 
+                sizes="(max-width:768px) 50vw, 320px" 
+                loading="lazy"
+                className="object-cover"
+              />
+            </div>
+            <div className="p-3 text-sm text-gray-700">{t.alt}</div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+=== app/_components/HeroLCP.tsx ===
+import Image from "next/image";
+
+export default function HeroLCP() {
+  return (
+    <div className="relative w-full rounded-2xl overflow-hidden" style={{ aspectRatio: "16/9" }}>
+      <Image
+        src="/images/home-extension-day.webp"
+        alt="Nowoczesny ogród zimowy VERANDANA"
+        fill
+        priority
+        sizes="(max-width:768px) 100vw, 960px"
+        className="object-cover"
+      />
+    </div>
+  );
+}
+
+=== app/_components/InquiryForm.tsx ===
+"use client";
+import { useTransition, useState } from "react";
+export default function InquiryForm() {
+  const [isPending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <form
+      className="mx-auto grid max-w-2xl gap-4 px-0"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        setMsg(null);
+        start(async () => {
+          try {
+            const res = await fetch("/api/lead", { method: "POST", body: fd });
+            const json = await res.json();
+            setMsg(json.ok ? "Dziękujemy! Wkrótce się odezwiemy." : (json.message ?? "Błąd wysyłki."));
+            if (json.ok) (e.currentTarget as HTMLFormElement).reset();
+          } catch { setMsg("Błąd sieci."); }
+        });
+      }}
+    >
+      <input name="name" required placeholder="Imię i nazwisko" className="rounded-2xl border p-3" />
+      <input name="phone" required placeholder="Telefon" className="rounded-2xl border p-3" inputMode="tel" />
+      <input name="email" type="email" placeholder="E-mail (opcjonalnie)" className="rounded-2xl border p-3" />
+      <textarea name="notes" rows={5} placeholder="Komentarz" className="rounded-2xl border p-3" />
+      <input type="text" name="company" className="hidden" tabIndex={-1} autoComplete="off" />
+      <button disabled={isPending} className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 font-medium text-white active:scale-[.99]">
+        {isPending ? "Wysyłanie…" : "Wyślij"}
+      </button>
+      {msg && <p className="text-sm text-slate-700">{msg}</p>}
+    </form>
+  );
+}
+
+=== app/_components/FormSection.tsx ===
+"use client";
+import dynamic from "next/dynamic";
+
+const InquiryForm = dynamic(() => import("./InquiryForm"), { 
+  ssr: false,
+  loading: () => <div className="h-96 bg-gray-100 rounded-2xl animate-pulse" />
+});
+
+export default function FormSection() {
+  return (
+    <section id="form" className="pt-16">
+      <InquiryForm />
+    </section>
+  );
+}
+
+=== app/layout.tsx ===
+import "./globals.css";
+import type { Metadata, Viewport } from "next";
+
+export const metadata: Metadata = {
+  title: "VERANDANA — bezpłatna wycena",
+  description: "Nowoczesne ogrody zimowe i szklane przedłużenia. Zostaw kontakt – oddzwonimy."
+};
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="pl">
+      <body className="min-h-dvh bg-white text-slate-900 antialiased">{children}</body>
+    </html>
+  );
+}
+
+=== app/api/public/locations/route.ts ===
+export const runtime = "edge";
+export async function GET() {
+  return new Response(JSON.stringify([{ city: "Warszawa" }, { city: "Gdańsk" }]), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600"
+    }
+  });
+}
+
+=== app/api/lead/route.ts ===
+import { NextResponse } from "next/server";
+export async function POST(req: Request) {
+  const fd = await req.formData();
+  if ((fd.get("company") as string | null)?.trim()) {
+    // honeypot: pretend success
+    return NextResponse.json({ ok: true });
+  }
+  const name = (fd.get("name") as string | null)?.trim();
+  const phone = (fd.get("phone") as string | null)?.trim();
+  if (!name || !phone) return NextResponse.json({ ok: false, message: "Wpisz imię i telefon." }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
+
+=== app/page.tsx ===
+'use client'
+
+import { useState, useEffect, useMemo, useRef } from 'react'
+import Calendar from '../components/Calendar'
+import FileUpload, { FileData } from '../components/FileUpload'
+
+const monthNamesGen = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
+  'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia']
+
+export default function Home() {
+  const [selectedType, setSelectedType] = useState('home-extension')
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    postal: '',
+    area: '',
+    comment: '',
+    express: false,
+    consent: false
+  })
+  
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth())
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
+  const [files, setFiles] = useState<FileData[]>([])
+  const [notifications, setNotifications] = useState<{id: number, message: string, type: 'error' | 'success'}[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showExitPopup, setShowExitPopup] = useState(false)
+  const [exitShown, setExitShown] = useState(false)
+  
+  const progress = useMemo(() => {
+    const requiredFields = ['name', 'phone', 'email', 'postal']
+    const filledFields = requiredFields.filter(field =>
+      formData[field as keyof typeof formData]?.toString().trim()
+    )
+    const hasDate = selectedDate !== null
+    const total = requiredFields.length + 1
+    const filled = filledFields.length + (hasDate ? 1 : 0)
+    return Math.round((filled / total) * 100)
+  }, [formData, selectedDate])
+  
+  const showNotification = (message: string, type: 'error' | 'success' = 'error') => {
+    const notification = {
+      id: Date.now(),
+      message,
+      type
+    }
+    setNotifications(prev => [...prev, notification])
+    
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notification.id))
+    }, 5000)
+  }
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!formData.name || !formData.email || !formData.phone || !formData.postal) {
+      showNotification('Wypełnij wszystkie wymagane pola', 'error')
+      return
+    }
+    
+    if (!selectedDate) {
+      showNotification('Wybierz termin realizacji', 'error')
+      return
+    }
+    
+    if (!formData.consent) {
+      showNotification('Musisz wyrazić zgodę na przetwarzanie danych', 'error')
+      return
+    }
+    
+    setIsSubmitting(true)
+    
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          type: selectedType,
+          date: selectedDate.toISOString(),
+          filesCount: files.length
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        showNotification('Dziękujemy! Twoje zapytanie zostało wysłane.', 'success')
+        setFormData({
+          name: '',
+          phone: '',
+          email: '',
+          postal: '',
+          area: '',
+          comment: '',
+          express: false,
+          consent: false
+        })
+        setSelectedDate(null)
+        setFiles([])
+        setSelectedType('home-extension')
+      } else {
+        showNotification('Wystąpił błąd. Spróbuj ponownie.', 'error')
+      }
+    } catch {
+      showNotification('Wystąpił błąd. Spróbuj ponownie.', 'error')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+  
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="fixed top-20 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div
+            key={notification.id}
+            className={`p-4 rounded-lg shadow-lg animate-slide-in ${
+              notification.type === 'error'
+                ? 'bg-red-100 text-red-800 border border-red-200'
+                : 'bg-green-100 text-green-800 border border-green-200'
+            }`}
+          >
+            {notification.message}
+          </div>
+        ))}
+      </div>
+      
+      <nav className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold">VERANDANA</h1>
+        </div>
+      </nav>
+      
+      <section className="py-20 px-4 text-center bg-gradient-to-r from-gray-900/80 to-gray-900/60">
+        <h2 className="text-5xl font-bold mb-4 text-white">
+          Nowoczesne ogrody zimowe z aluminium
+        </h2>
+        <p className="text-xl text-white/90 mb-8">
+          Od funkcjonalnych rozwiązań dla rodzin po luksusowe
+        </p>
+      </section>
+      
+      <section className="py-16 bg-white">
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold mb-2">Wybierz typ konstrukcji</h2>
+            <p className="text-gray-600">Każdy typ to inna filozofia życia z naturą</p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
+            {[
+              { type: 'home-extension', name: 'Home Extension', desc: 'Nowoczesna bryła z płaskim dachem' },
+              { type: 'classic-warm', name: 'Klasyczny ciepły', desc: 'Szlachetny detal i elegancja' },
+              { type: 'seasonal-cold', name: 'Sezonowy zimny', desc: 'Idealny na wiosnę i lato' },
+              { type: 'pergola', name: 'Pergola Bioclimatic', desc: 'Lamele regulowane' },
+              { type: 'unknown', name: 'Nie wiem', desc: 'Potrzebuję porady eksperta' }
+            ].map(item => (
+              <div
+                key={item.type}
+                className={`border-2 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+                  selectedType === item.type ? 'border-orange-400 shadow-lg shadow-orange-400/20' : 'border-gray-200 hover:border-orange-400'
+                }`}
+                onClick={() => setSelectedType(item.type)}
+              >
+                <div className="h-36 bg-gray-100 flex items-center justify-center">
+                  <span className="text-gray-500">{item.name}</span>
+                </div>
+                <div className="p-4">
+                  <div className="font-semibold text-sm mb-1">{item.name}</div>
+                  <div className="text-xs text-gray-600 leading-tight">{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      
+      <section id="form" className="py-16 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-4xl font-bold font-serif mb-2">Zacznij swoją podróż</h2>
+            <p className="text-gray-600">3 kroki do wymarzanego ogrodu</p>
+          </div>
+          
+          <div className="bg-white rounded-xl p-6 mb-6 shadow-sm">
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="text-center mt-3 text-sm text-gray-600">
+              Wypełniono: {progress}%
+            </div>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="bg-white rounded-2xl p-8 shadow-sm">
+              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-200">
+                <div className="w-9 h-9 bg-orange-400 text-white rounded-full flex items-center justify-center font-semibold">1</div>
+                <h3 className="text-xl font-semibold">Dane osobowe</h3>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">
+                    Imię <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">
+                    Telefon <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">
+                    Email <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">
+                    Kod pocztowy <span className="text-orange-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    pattern="[0-9]{2}-[0-9]{3}"
+                    placeholder="00-000"
+                    value={formData.postal}
+                    onChange={(e) => setFormData({...formData, postal: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-8 shadow-sm">
+              <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-200">
+                <div className="w-9 h-9 bg-orange-400 text-white rounded-full flex items-center justify-center font-semibold">2</div>
+                <h3 className="text-xl font-semibold">Szczegóły projektu</h3>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div className="relative">
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">
+                    Termin realizacji <span className="text-orange-400">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-left flex items-center gap-2 hover:border-orange-400 transition-all duration-200"
+                  >
+                    <span>📅</span>
+                    <span>
+                      {selectedDate
+                        ? `${selectedDate.getDate()} ${monthNamesGen[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
+                        : 'Wybierz termin'
+                      }
+                    </span>
+                  </button>
+                  
+                  <Calendar
+                    selectedDate={selectedDate}
+                    onDateSelect={(date) => {
+                      setSelectedDate(date)
+                      setIsCalendarOpen(false)
+                    }}
+                    isOpen={isCalendarOpen}
+                    onClose={() => setIsCalendarOpen(false)}
+                    currentMonth={currentMonth}
+                    currentYear={currentYear}
+                    onMonthChange={(direction) => {
+                      let newMonth = currentMonth + direction
+                      let newYear = currentYear
+                      
+                      if (newMonth < 0) {
+                        newMonth = 11
+                        newYear--
+                      } else if (newMonth > 11) {
+                        newMonth = 0
+                        newYear++
+                      }
+                      
+                      setCurrentMonth(newMonth)
+                      setCurrentYear(newYear)
+                    }}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm text-gray-600 mb-2 font-medium">Powierzchnia (m²)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={formData.area}
+                    onChange={(e) => setFormData({...formData, area: e.target.value})}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200"
+                  />
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <label className="block text-sm text-gray-600 mb-2 font-medium">Komentarz</label>
+                <textarea
+                  rows={4}
+                  value={formData.comment}
+                  onChange={(e) => setFormData({...formData, comment: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 transition-all duration-200 resize-y"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm text-gray-600 mb-2 font-medium">Załączniki</label>
+                <FileUpload
+                  files={files}
+                  onFilesChange={setFiles}
+                  onError={showNotification}
+                />
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-8 shadow-sm">
+              <label className="flex items-start gap-3 mb-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  required
+                  checked={formData.consent}
+                  onChange={(e) => setFormData({...formData, consent: e.target.checked})}
+                  className="w-4 h-4 mt-1 accent-orange-400"
+                />
+                <span className="text-sm">
+                  Wyrażam zgodę na przetwarzanie danych osobowych <span className="text-orange-400">*</span>
+                </span>
+              </label>
+              
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 bg-gray-900 text-white rounded-xl text-lg font-semibold hover:bg-orange-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Wysyłanie...' : 'Wyślij zapytanie'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+      
+      <footer className="bg-gray-900 text-white py-12 text-center">
+        <div>VERANDANA sp. z o.o. | 44-151 Gliwice, Miodunki 3</div>
+      </footer>
+    </div>
+  )
+}
+
+=== app/globals.css ===
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Test - jeśli to widzisz, CSS się ładuje */
+body {
+  background: linear-gradient(to bottom, #f0f9ff, #e0f2fe) !important;
+}
+
+h1 {
+  color: #0f172a !important;
+}
+
+=== app/not-found.tsx ===
+export default function NotFound(){
+  return (
+    <main className="mx-auto max-w-screen-md p-8 text-center">
+      <h1 className="text-2xl font-semibold">Nie znaleziono strony</h1>
+      <p className="mt-2 text-slate-600">Wróć na stronę główną.</p>
+    </main>
+  );
+}
+
+=== components/FileUpload.tsx ===
+'use client'
+import React, { useState, useEffect, useRef } from 'react'
+
+export interface FileData {
+  id: string
+  file: File
+  progress: number
+  preview?: string
+}
+
+interface FileUploadProps {
+  files?: FileData[]
+  onFilesChange: React.Dispatch<React.SetStateAction<FileData[]>>
+  onError?: (message: string, type?: 'error' | 'success') => void
+}
+
+export default function FileUpload({ files, onFilesChange, onError }: FileUploadProps) {
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const intervalsRef = useRef<NodeJS.Timeout[]>([])
+
+  useEffect(() => {
+    const snapshot = [...intervalsRef.current]
+    return () => { snapshot.forEach((it) => clearInterval(it)) }
+  }, [])
+
+  const notify = (msg: string, type: 'error' | 'success' = 'error') => onError?.(msg, type)
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }
+  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); processFiles(Array.from(e.dataTransfer.files)) }
+
+  const clearInput = () => { if (fileInputRef.current) fileInputRef.current.value = '' }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return
+    processFiles(Array.from(e.target.files))
+    clearInput() // pozwala wybrać ten sam plik ponownie
+  }
+
+  const acceptList = "image/*,.pdf,.doc,.docx,.heic"
+  const accept = new Set(['image/jpeg','image/png','image/webp','image/gif','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','image/heic'])
+  const MAX_SIZE = 10 * 1024 * 1024
+  const MAX_FILES = 5
+
+  const processFiles = (picked: File[]) => {
+    const current = files ?? []
+    if (current.length + picked.length > MAX_FILES) { notify(`Maksymalnie ${MAX_FILES} plików`); return }
+    const filtered = picked.filter(f => {
+      const t = f.type || (f.name.toLowerCase().endsWith('.heic') ? 'image/heic' : '')
+      if (!accept.has(t)) { notify(`Niedozwolony typ: ${f.name}`); return false }
+      if (f.size > MAX_SIZE)  { notify(`Za duży plik: ${f.name}`);   return false }
+      return true
+    })
+    const newFiles: FileData[] = filtered.map(file => ({
+      id: Math.random().toString(36).slice(2, 11),
+      file, progress: 0,
+      preview: (file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.heic')) ? URL.createObjectURL(file) : undefined,
+    }))
+    onFilesChange(prev => [...prev, ...newFiles])
+    newFiles.forEach(fileData => {
+      const interval = setInterval(() => {
+        onFilesChange(prevFiles =>
+          prevFiles.map(f => {
+            if (f.id === fileData.id) {
+              const p = Math.min(f.progress + Math.random() * 30, 100)
+              if (p >= 100) {
+                clearInterval(interval)
+                const i = intervalsRef.current.indexOf(interval)
+                if (i > -1) intervalsRef.current.splice(i, 1)
+                notify(`Załadowano: ${fileData.file.name}`, 'success')
+              }
+              return { ...f, progress: p }
+            }
+            return f
+          })
+        )
+      }, 500)
+      intervalsRef.current.push(interval)
+    })
+  }
+
+  const items = files ?? []
+  const removeFile = (id: string) => onFilesChange(prev => prev.filter(f => f.id !== id))
+
+  return (
+    <div
+      className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragging ? 'border-orange-500 bg-orange-50' : 'border-gray-300 hover:border-gray-400'}`}
+      onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        onClick={clearInput}
+        className="hidden"
+        accept={acceptList}
+      />
+      <button type="button" onClick={() => fileInputRef.current?.click()} className="font-medium text-orange-500 hover:text-orange-600">
+        Kliknij aby wybrać pliki
+      </button>
+      <span className="mt-2 block text-sm text-gray-600">…lub przeciągnij i upuść</span>
+      <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF, HEIC, PDF, DOC/DOCX do 10MB (max 5)</p>
+
+      {items.length > 0 && (
+        <div className="mt-4 space-y-2 text-left">
+          {items.map(f => (
+            <div key={f.id} className="bg-gray-50 p-2 rounded border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="truncate text-sm">{f.file.name}</div>
+                <button type="button" onClick={() => removeFile(f.id)} className="text-xs text-red-600 hover:underline">Usuń</button>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-1 mt-2">
+                <div className="h-1 rounded-full transition-all" style={{ width: `${Math.round(f.progress)}%`, backgroundColor: '#16a34a' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+=== components/Calendar.tsx ===
+'use client'
+import React, { useState, useCallback, useMemo } from 'react'
+
+type DayStatus = 'past' | 'unavailable' | 'weekend' | 'available'
+
+export interface CalendarProps {
+  selectedDate?: Date | null
+  onDateSelect: (date: Date | null) => void
+  isOpen?: boolean
+  onClose?: () => void
+  currentMonth?: number
+  currentYear?: number
+  onMonthChange?: (direction: number) => void
+}
+
+export default function Calendar({
+  selectedDate: selectedDateProp = null,
+  onDateSelect,
+  isOpen,
+  onClose,
+  currentMonth,
+  currentYear,
+  onMonthChange
+}: CalendarProps) {
+  const now = new Date()
+  const [im, setIM] = useState<number>(typeof currentMonth === 'number' ? currentMonth : now.getMonth())
+  const [iy, setIY] = useState<number>(typeof currentYear === 'number' ? currentYear : now.getFullYear())
+  const [isel, setISel] = useState<Date | null>(selectedDateProp)
+
+  const month = typeof currentMonth === 'number' ? currentMonth : im
+  const year  = typeof currentYear === 'number' ? currentYear : iy
+  const selectedDate = selectedDateProp ?? isel
+
+  const monthNames = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień']
+  const dayNames   = ['Pn','Wt','Śr','Cz','Pt','Sb','Nd']
+
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate()
+  const getFirstDayOfMonth = (y: number, m: number) => {
+    const firstDay = new Date(y, m, 1).getDay()
+    return firstDay === 0 ? 6 : firstDay - 1
+  }
+
+  const getDayStatus = useCallback((d: Date): DayStatus => {
+    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    if (date < today) return 'past'
+    const dow = date.getDay()
+    if (dow === 0) return 'unavailable'
+    const maxDate = new Date(); maxDate.setMonth(maxDate.getMonth() + 3)
+    if (date > maxDate) return 'unavailable'
+    return dow === 6 ? 'weekend' : 'available'
+  }, [])
+
+  const handleDateClick = useCallback((day: number) => {
+    const date = new Date(year, month, day)
+    const status = getDayStatus(date)
+    if (status === 'available' || status === 'weekend') {
+      setISel(date)
+      onDateSelect(date)
+      onClose?.()
+    }
+  }, [getDayStatus, month, year, onClose, onDateSelect])
+
+  const navigateMonth = useCallback((direction: number) => {
+    if (onMonthChange) { onMonthChange(direction); return }
+    const base = new Date(year, month, 1)
+    base.setMonth(base.getMonth() + direction)
+    setIM(base.getMonth()); setIY(base.getFullYear())
+  }, [month, year, onMonthChange])
+
+  const isDateSelected = useCallback((day: number) => {
+    if (!selectedDate) return false
+    return selectedDate.getDate() === day && selectedDate.getMonth() === month && selectedDate.getFullYear() === year
+  }, [selectedDate, month, year])
+
+  const renderCalendarDays = useMemo(() => {
+    const daysInMonth = getDaysInMonth(year, month)
+    const firstDayOfMonth = getFirstDayOfMonth(year, month)
+    const days: JSX.Element[] = []
+    for (let i = 0; i < firstDayOfMonth; i++) days.push(<div key={`empty-${i}`} className="h-10" />)
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day)
+      const status = getDayStatus(date)
+      const selected = isDateSelected(day)
+      let cls = 'h-10 flex items-center justify-center rounded-lg cursor-pointer transition-colors '
+      if (selected) cls += 'bg-orange-500 text-white font-bold '
+      else if (status === 'past' || status === 'unavailable') cls += 'text-gray-300 cursor-not-allowed '
+      else if (status === 'weekend') cls += 'bg-orange-50 text-orange-600 hover:bg-orange-100 '
+      else cls += 'hover:bg-gray-100 '
+      days.push(<div key={day} className={cls} onClick={() => handleDateClick(day)}>{day}</div>)
+    }
+    return days
+  }, [year, month, getDayStatus, isDateSelected, handleDateClick])
+
+  if (isOpen === false) return null
+
+  return (
+    <div className={`bg-white rounded-lg p-4 border border-gray-200 ${isOpen ? 'absolute z-50 mt-2 shadow-xl' : ''}`}>
+      <div className="flex justify-between items-center mb-4">
+        <button type="button" onClick={() => navigateMonth(-1)} className="p-2 hover:bg-gray-100 rounded">←</button>
+        <h3 className="font-semibold">{monthNames[month]} {year}</h3>
+        <button type="button" onClick={() => navigateMonth(1)} className="p-2 hover:bg-gray-100 rounded">→</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {dayNames.map(d => <div key={d} className="text-center text-xs font-semibold text-gray-600">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">{renderCalendarDays}</div>
+      {isOpen && (
+        <div className="mt-3 flex justify-end">
+          <button type="button" onClick={() => onClose?.()} className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">Zamknij</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+=== components/InquiryForm.tsx ===
+'use client'
+import React, { useState, useEffect } from 'react'
+import Calendar from '@/components/Calendar'
+import FileUpload, { type FileData } from '@/components/FileUpload'
+import { validateEmail, validatePhone, validatePostalCode, formatPhone, formatPostalCode } from '@/lib/validation'
+
+interface ValidationErrors {
+  email?: string;
+  phone?: string;
+  postalCode?: string;
+}
+
+export default function InquiryForm() {
+  const [selectedType, setSelectedType] = useState<string>('')
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
+
+  const [files, setFiles] = useState<FileData[]>([])
+  const [formProgress, setFormProgress] = useState(0)
+  const [showExitPopup, setShowExitPopup] = useState(false)
+  const [emailForQuestions, setEmailForQuestions] = useState('')
+
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [city, setCity] = useState('')
+  const [comment, setComment] = useState('')
+
+  const [errors, setErrors] = useState<ValidationErrors>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+
+  const validateField = (field: string, value: string) => {
+    const newErrors = { ...errors }
+    if (field === 'email') {
+      const v = validateEmail(value)
+      if (!v.isValid && touched.email) newErrors.email = v.error; else delete newErrors.email
+    }
+    if (field === 'phone') {
+      const v = validatePhone(value)
+      if (!v.isValid && touched.phone) newErrors.phone = v.error; else delete newErrors.phone
+    }
+    if (field === 'postalCode') {
+      const v = validatePostalCode(value)
+      if (!v.isValid && touched.postalCode) newErrors.postalCode = v.error; else delete newErrors.postalCode
+    }
+    setErrors(newErrors)
+  }
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => { const v = e.target.value; setEmail(v); validateField('email', v) }
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => { const v = formatPhone(e.target.value); setPhone(v); validateField('phone', v) }
+  const handlePostalCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = formatPostalCode(e.target.value); if (v.length <= 6) { setPostalCode(v); validateField('postalCode', v) }
+  }
+  const handleBlur = (field: string) => { setTouched({ ...touched, [field]: true }); validateField(field, (field==='email'?email:field==='phone'?phone:postalCode)) }
+
+  useEffect(() => {
+    let progress = 0
+    const fields = [selectedType, name, email, phone, address, postalCode, city, selectedDate, files.length > 0]
+    fields.forEach(field => { if (field) progress += 100 / fields.length })
+    setFormProgress(Math.min(Math.round(progress), 100))
+  }, [selectedType, name, email, phone, address, postalCode, city, selectedDate, files])
+
+  useEffect(() => {
+    const onLeave = (e: MouseEvent) => {
+      if (e.clientY <= 0 && formProgress > 0 && formProgress < 100) setShowExitPopup(true)
+    }
+    document.addEventListener('mouseleave', onLeave)
+    return () => document.removeEventListener('mouseleave', onLeave)
+  }, [formProgress])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const ev = validateEmail(email)
+    const pv = validatePhone(phone)
+    const cv = validatePostalCode(postalCode)
+    if (!ev.isValid || !pv.isValid || !cv.isValid) {
+      setErrors({ email: ev.error, phone: pv.error, postalCode: cv.error })
+      setTouched({ email: true, phone: true, postalCode: true })
+      alert('Popraw błędy w formularzu przed wysłaniem')
+      return
+    }
+    console.log('Form submitted:', { selectedType, name, email, phone, address, postalCode, city, selectedDate, files, comment })
+    alert('Dziękujemy! Skontaktujemy się wkrótce.')
+  }
+
+  const gardenTypes = [
+    { id: 'home-extension', name: 'Home Extension', icon: '🏠', desc: 'Rozszerzenie przestrzeni mieszkalnej' },
+    { id: 'classic-warm', name: 'Klasyczny ciepły', icon: '☀️', desc: 'Całoroczny, ogrzewany ogród' },
+    { id: 'seasonal-cold', name: 'Sezonowy zimny', icon: '❄️', desc: 'Użytkowany w ciepłych miesiącach' },
+    { id: 'pergola', name: 'Pergola', icon: '🌿', desc: 'Otwarta konstrukcja ogrodowa' },
+    { id: 'not-sure', name: 'Nie wiem', icon: '❓', desc: 'Pomożemy wybrać najlepsze rozwiązanie' }
+  ]
+
+  return (
+    <>
+      <form onSubmit={handleSubmit} className="max-w-6xl mx-auto p-6 relative">
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-700">Postęp wypełniania</span>
+            <span className="text-sm font-medium text-orange-500">{formProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="bg-gradient-to-r from-orange-400 to-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${formProgress}%` }} />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">1. Wybierz typ ogrodu</h3>
+            <div className="space-y-3">
+              {gardenTypes.map(type => (
+                <button key={type.id} type="button" onClick={() => setSelectedType(type.id)}
+                  className={`w-full p-4 rounded-lg border-2 transition-all ${selectedType === type.id ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <div className="flex items-center">
+                    <span className="text-2xl mr-3">{type.icon}</span>
+                    <div className="text-left">
+                      <div className="font-semibold">{type.name}</div>
+                      <div className="text-sm text-gray-600">{type.desc}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">2. Dane kontaktowe</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Imię i nazwisko *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500" required />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input type="email" value={email} onChange={handleEmailChange} onBlur={() => handleBlur('email')}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${errors.email ? 'border-red-500' : 'border-gray-300'}`} required />
+                {errors.email && (<p className="mt-1 text-sm text-red-600">{errors.email}</p>)}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Telefon *</label>
+                <input type="tel" value={phone} onChange={handlePhoneChange} onBlur={() => handleBlur('phone')} placeholder="123 456 789"
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`} required />
+                {errors.phone && (<p className="mt-1 text-sm text-red-600">{errors.phone}</p>)}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adres</label>
+                <input type="text" value={address} onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kod pocztowy</label>
+                  <input type="text" value={postalCode} onChange={handlePostalCodeChange} onBlur={() => handleBlur('postalCode')} placeholder="00-950"
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${errors.postalCode ? 'border-red-500' : 'border-gray-300'}`} />
+                  {errors.postalCode && (<p className="mt-1 text-xs text-red-600">{errors.postalCode}</p>)}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Miasto</label>
+                  <input type="text" value={city} onChange={(e) => setCity(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6 relative">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">3. Termin i materiały</h3>
+
+            <div className="space-y-4">
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Preferowany termin spotkania</label>
+                <button type="button" onClick={() => setIsCalendarOpen(v => !v)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-left hover:border-gray-400">
+                  {selectedDate ? selectedDate.toLocaleDateString('pl-PL') : 'Wybierz termin'}
+                </button>
+                <div className="relative">
+                  {isCalendarOpen && (
+                    <div className="absolute z-50 mt-2">
+                      <Calendar
+                        isOpen
+                        selectedDate={selectedDate}
+                        onDateSelect={(date) => { setSelectedDate(date); setIsCalendarOpen(false) }}
+                        onClose={() => setIsCalendarOpen(false)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Dodaj zdjęcia lub dokumenty</label>
+                <FileUpload files={files} onFilesChange={setFiles} onError={(m) => console.log('[Upload]', m)} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dodatkowe informacje</label>
+                <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Opisz swoje oczekiwania..." />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg p-6">
+          <h3 className="text-lg font-bold mb-3">Podsumowanie zapytania:</h3>
+          <div className="grid md:grid-cols-3 gap-4 text-sm">
+            <div><span className="font-medium">Typ ogrodu:</span> {selectedType || 'Nie wybrano'}</div>
+            <div><span className="font-medium">Kontakt:</span> {name || 'Nie podano'}</div>
+            <div><span className="font-medium">Termin:</span> {selectedDate ? selectedDate.toLocaleDateString('pl-PL') : 'Nie wybrano'}</div>
+          </div>
+        </div>
+
+        <div className="mt-6 text-center">
+          <button type="submit" disabled={formProgress < 50}
+            className={`px-8 py-3 rounded-full font-semibold transition-all ${formProgress >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-lg' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
+            {formProgress >= 50 ? 'Wyślij zapytanie' : \`Wypełnij formularz (\${formProgress}%)\`}
+          </button>
+        </div>
+      </form>
+
+      {showExitPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-md mx-4">
+            <h2 className="text-2xl font-bold mb-4">Poczekaj! Mamy dla Ciebie coś specjalnego</h2>
+            <p className="mb-4">Zostaw swój email, a wyślemy Ci listę 10 najważniejszych pytań, które pomogą Ci przygotować się do rozmowy o ogrodzie zimowym.</p>
+            <input type="email" value={emailForQuestions} onChange={(e) => setEmailForQuestions(e.target.value)} placeholder="twoj@email.pl"
+              className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => { if (emailForQuestions) { alert('Dziękujemy! Sprawdź swoją skrzynkę email.'); setShowExitPopup(false) } }}
+                className="flex-1 bg-orange-500 text-white py-2 rounded-md hover:bg-orange-600">Wyślij mi pytania</button>
+              <button onClick={() => setShowExitPopup(false)} className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-md hover:bg-gray-300">Nie, dziękuję</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+=== components/LazyOnView.tsx ===
+"use client";
+export default function LazyOnView({ children }: { children: React.ReactNode }) { return <>{children}</>; }
+
+=== lib/validation.ts ===
+export const validateEmail = (email: string): { isValid: boolean; error?: string } => {
+  if (!email) return { isValid: false, error: 'Email jest wymagany' }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return { isValid: false, error: 'Nieprawidłowy format email' }
+  }
+  return { isValid: true }
+}
+
+export const validatePhone = (phone: string): { isValid: boolean; error?: string } => {
+  if (!phone) return { isValid: false, error: 'Telefon jest wymagany' }
+  // Usuń spacje, myślniki i inne znaki
+  const cleanPhone = phone.replace(/[\s\-\(\)]/g, '')
+  // Polski numer: 9 cyfr lub z prefixem +48
+  const phoneRegex = /^(?:\+48)?(?:\d{9})$/
+  if (!phoneRegex.test(cleanPhone)) {
+    return { isValid: false, error: 'Podaj 9 cyfr (np. 123456789 lub +48123456789)' }
+  }
+  return { isValid: true }
+}
+
+export const validatePostalCode = (code: string): { isValid: boolean; error?: string } => {
+  if (!code) return { isValid: false, error: 'Kod pocztowy jest wymagany' }
+  // Polski kod pocztowy: XX-XXX
+  const postalRegex = /^\d{2}-\d{3}$/
+  if (!postalRegex.test(code)) {
+    return { isValid: false, error: 'Format: XX-XXX (np. 00-950)' }
+  }
+  return { isValid: true }
+}
+
+export const formatPhone = (value: string): string => {
+  const cleaned = value.replace(/\D/g, '')
+  if (cleaned.length <= 3) return cleaned
+  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`
+  return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)}`
+}
+
+export const formatPostalCode = (value: string): string => {
+  const cleaned = value.replace(/\D/g, '')
+  if (cleaned.length <= 2) return cleaned
+  return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 5)}`
+}
+
+=== lib/placeholders.ts ===
+import data from "@/data/placeholders.json" assert { type: "json" };
+type Entry = { src: string; width: number | null; height: number | null; aspectRatio: number | null; placeholder: string; dominantColor: string; };
+type Map = Record<string, Entry>;
+const map: Map = (data as any) || {};
+export function getPlaceholder(path: string) { return map[path]?.placeholder; }
+export function getDominantColor(path: string, fallback = "#f3f4f6") { return map[path]?.dominantColor || fallback; }
+export function getAspectRatio(path: string, fallback = "16/9") {
+  const ar = map[path]?.aspectRatio; if (!ar) return fallback; return `${ar.toFixed(4)}`;
+}
+
+=== lib/imageSizes.ts ===
+export const sizes = {
+  hero: "(max-width: 480px) 100vw, (max-width: 768px) 100vw, 1200px",
+  tile: "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw",
+  gallery: "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
+  formInline: "(max-width: 768px) 100vw, 480px"
+} as const;
+
+=== lib/imagePlaceholders.ts ===
+import plist from "../data/placeholders.json" assert { type: "json" };
+export function getPlaceholder(src: string): string | undefined {
+  return (plist as Record<string,string>)[src];
+}
+

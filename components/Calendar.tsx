@@ -87,7 +87,7 @@ export default function Calendar({
       else if (status === 'past' || status === 'unavailable') cls += 'text-gray-300 cursor-not-allowed '
       else if (status === 'weekend') cls += 'bg-orange-50 text-orange-600 hover:bg-orange-100 '
       else cls += 'hover:bg-gray-100 '
-      days.push(<div key={day} className={cls} onClick={() => handleDateClick(day)}>{day}</div>)
+      days.push(<div key={`${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`} className={cls} onClick={() => handleDateClick(day)}>{day}</div>)
     }
     return days
   }, [year, month, getDayStatus, isDateSelected, handleDateClick])

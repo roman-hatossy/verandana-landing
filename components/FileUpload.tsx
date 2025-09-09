@@ -53,7 +53,7 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
       return true
     })
     const newFiles: FileData[] = filtered.map(file => ({
-      id: Math.random().toString(36).slice(2, 11),
+      id: (typeof crypto !== "undefined" && "randomUUID" in crypto ? (crypto).randomUUID() : (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,11))),
       file, progress: 0,
       preview: (file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.heic')) ? URL.createObjectURL(file) : undefined,
     }))

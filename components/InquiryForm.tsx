@@ -222,7 +222,7 @@ export default function InquiryForm() {
         <div className="mt-6 text-center">
           <button type="submit" disabled={formProgress < 50}
             className={`px-8 py-3 rounded-full font-semibold transition-all ${formProgress >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-lg' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
-            {formProgress >= 50 ? 'Wyślij zapytanie' : \`Wypełnij formularz (\${formProgress}%)\`}
+            {formProgress >= 50 ? 'Wyślij zapytanie' : `Wypełnij formularz (${formProgress}%)`}
           </button>
         </div>
       </form>
