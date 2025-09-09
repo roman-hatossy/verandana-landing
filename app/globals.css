@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Test - jeśli to widzisz, CSS się ładuje */
+body {
+  background: linear-gradient(to bottom, #f0f9ff, #e0f2fe) !important;
+}
+
+h1 {
+  color: #0f172a !important;
+}
