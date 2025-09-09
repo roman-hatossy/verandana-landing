@@ -20,7 +20,7 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
   const intervalsRef = useRef<NodeJS.Timeout[]>([])
 
   useEffect(() => {
-    const localIntervals = intervalsRef.current
+    const localIntervals = [...intervalsRef.current]
     return () => { localIntervals.forEach((it) => clearInterval(it)) }
   }, [])
 
@@ -42,13 +42,11 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
 
   const processFiles = (picked: File[]) => {
     const current = files ?? []
-    if (current.length + picked.length > MAX_FILES) {
-      notify(`Maksymalnie ${MAX_FILES} plików`, 'error'); return
-    }
+    if (current.length + picked.length > MAX_FILES) { notify(`Maksymalnie ${MAX_FILES} plików`); return }
 
     const filtered = picked.filter(f => {
-      if (!accept.has(f.type)) { notify(`Niedozwolony typ: ${f.name}`, 'error'); return false }
-      if (f.size > MAX_SIZE) { notify(`Za duży plik: ${f.name}`, 'error'); return false }
+      if (!accept.has(f.type)) { notify(`Niedozwolony typ: ${f.name}`); return false }
+      if (f.size > MAX_SIZE) { notify(`Za duży plik: ${f.name}`); return false }
       return true
     })
 
@@ -59,11 +57,11 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
       preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
     }))
 
-    onFilesChange((prev) => [...prev, ...newFiles])
+    onFilesChange((prev: FileData[]) => [...prev, ...newFiles])
 
     newFiles.forEach((fileData) => {
       const interval = setInterval(() => {
-        onFilesChange((prevFiles) =>
+        onFilesChange((prevFiles: FileData[]) =>
           prevFiles.map((f) => {
             if (f.id === fileData.id) {
               const newProgress = Math.min(f.progress + Math.random() * 30, 100)
@@ -84,7 +82,7 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
   }
 
   const removeFile = (id: string) => {
-    onFilesChange((prev) => prev.filter((f) => f.id !== id))
+    onFilesChange((prev: FileData[]) => prev.filter((f) => f.id !== id))
   }
 
   const items = files ?? []
@@ -104,19 +102,13 @@ export default function FileUpload({ files, onFilesChange, onError }: FileUpload
         className="hidden"
         accept="image/*,.pdf"
       />
-
       <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
       </svg>
-
       <p className="mt-2 text-sm text-gray-600">
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="font-medium text-orange-500 hover:text-orange-600">
-          Kliknij aby wybrać pliki
-        </button>{' '}
-        lub przeciągnij i upuść
+        <button type="button" onClick={() => fileInputRef.current?.click()} className="font-medium text-orange-500 hover:text-orange-600">Kliknij aby wybrać pliki</button>{' '}lub przeciągnij i upuść
       </p>
       <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF, PDF do 10MB (max 5 plików)</p>
-
       {items.length > 0 && (
         <div className="mt-4 space-y-2 text-left">
           {items.map((f) => (
